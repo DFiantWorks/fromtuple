@@ -12,6 +12,8 @@ class ConversionSpec extends FunSuite:
     assertEquals(errors.map(e => (e.column, e.message)).toSeq, expectedErrors)
 
   test("Tuple to List"):
+    val l0: List[Int] = (1)
+    assertEquals(l0, List(1))
     val l1: List[Int] = (1, 2)
     assertEquals(l1, List(1, 2))
     val ll1: List[List[Int]] = (l1, l1)
@@ -39,6 +41,8 @@ class ConversionSpec extends FunSuite:
     )
 
   test("Tuple to Seq/Set/ListSet"):
+    val l0: Set[Int] = (1)
+    assertEquals(l0, Set(1))
     val l1: Seq[Int] = (1, 2)
     assertEquals(l1, Seq(1, 2))
     val ll1: Set[Seq[Int]] = (l1, l1)
@@ -109,5 +113,5 @@ class ConversionSpec extends FunSuite:
       val x: Foo[Int] = (1, 2, 3)
       """,
       26 -> """Tuple conversion error""",
-      25 -> """Expected number of arguments for `class Foo` is 2, but found 3"""
+      26 -> """Expected number of arguments for `class Foo` is 2, but found 3"""
     )

@@ -8,10 +8,10 @@ private object macros:
   trait AllowedConversion[F, T]
   trait AllowedConversionLP:
     object OK extends AllowedConversion[Any, Any]
-    inline given fromElement[F, T <: Iterable[F]]: AllowedConversion[F, T] =
+    inline given fromTuple[F <: Tuple, T]: AllowedConversion[F, T] =
       OK.asInstanceOf[AllowedConversion[F, T]]
   object AllowedConversion extends AllowedConversionLP:
-    inline given fromTuple[F <: Tuple, T]: AllowedConversion[F, T] =
+    inline given fromElement[F, T <: Iterable[F]]: AllowedConversion[F, T] =
       OK.asInstanceOf[AllowedConversion[F, T]]
 
   extension [Q <: Quotes](using q: Q)(tpe: q.reflect.TypeRepr)
@@ -72,21 +72,34 @@ private object macros:
     val fromType = from.tpe.asTypeAny
     def conversionSummon: Option[Term] =
       val toType = toTpe.asTypeAny
-      val convertionTpe =
-        AppliedType(Symbol.requiredClass("scala.Conversion").typeRef, List(from.tpe, toTpe))
-      Implicits.search(convertionTpe) match
-        case succ: ImplicitSearchSuccess =>
-          val conv = succ.tree.asExprOf[Conversion[fromType.Underlying, toType.Underlying]]
-          Some('{ ${ conv }(${ from.asExprOf[fromType.Underlying] }) }.asTerm)
-        case _: NoMatchingImplicits =>
-          report.error(
-            s"Found: (${from.show} : ${from.tpe.widen.show})\nRequired: ${toTpe.show}",
-            fromPos
-          )
-          None
-        case fail: ImplicitSearchFailure =>
-          report.error(fail.explanation, fromPos)
-          None
+      val iterableConversion = toType match
+        case '[Iterable[a]] =>
+          // currently a naive implementation that does not ignore whitespaces
+          // lazy val lhs = Position(fromPos.sourceFile, fromPos.start - 1, fromPos.start).sourceCode
+          // lazy val rhs = Position(fromPos.sourceFile, fromPos.end, fromPos.end + 1).sourceCode
+          // val singleElementTuple =
+          //   (lhs, rhs) match
+          //     case (Some("("), Some(")")) => true
+          //     case _                      => false
+          convertRecur(from, TypeRepr.of[a]).flatMap(x => tupleConversion(List(x)))
+        case _ => None
+      iterableConversion.orElse {
+        val convertionTpe =
+          AppliedType(Symbol.requiredClass("scala.Conversion").typeRef, List(from.tpe, toTpe))
+        Implicits.search(convertionTpe) match
+          case succ: ImplicitSearchSuccess =>
+            val conv = succ.tree.asExprOf[Conversion[fromType.Underlying, toType.Underlying]]
+            Some('{ ${ conv }(${ from.asExprOf[fromType.Underlying] }) }.asTerm)
+          case _: NoMatchingImplicits =>
+            report.error(
+              s"Found: (${from.show} : ${from.tpe.widen.show})\nRequired: ${toTpe.show}",
+              fromPos
+            )
+            None
+          case fail: ImplicitSearchFailure =>
+            report.error(fail.explanation, fromPos)
+            None
+      }
     def tupleConversion(tupleArgs: List[Term]): Option[Term] =
       def varArgsExpr[A: Type, C[_]: Type](
           constr: List[Expr[A]] => Expr[C[A]]
@@ -179,19 +192,6 @@ private object macros:
                 )
           else conversionSummon
         case _ => conversionSummon
-    // currently a naive implementation that does not ignore whitespaces
-    // lazy val lhs = Position(fromPos.sourceFile, fromPos.start - 1, fromPos.start).sourceCode
-    // lazy val rhs = Position(fromPos.sourceFile, fromPos.end, fromPos.end + 1).sourceCode
-    // val singleElementTuple = false
-    // (lhs, rhs) match
-    //   case (Some("("), Some(")")) => true
-    //   case _                      => false
-    // if (singleElementTuple)
-    //   val updatedFrom = '{
-    //     Tuple1[fromType.Underlying](${ from.asExprOf[fromType.Underlying] })
-    //   }.asTerm
-    //   val updatedPos = Position(fromPos.sourceFile, fromPos.start - 1, fromPos.end + 1)
-    //   convertRecurPos(updatedFrom, toTpe, updatedPos)
     // if the from term type matches the target type, then return it as is
     if (from.tpe <:< toTpe) Some(from)
     else
@@ -226,6 +226,9 @@ private object macros:
       from: Expr[F]
   ): Expr[X] =
     import quotes.reflect.*
-    convertRecur(from.asTerm, TypeRepr.of[X].dealias)
+    val fixX = TypeRepr.of[X].dealias match
+      case AndType(a, b) => b
+      case x             => x
+    convertRecur(from.asTerm, fixX.dealias)
       .map(toTerm => '{ ${ toTerm.asExpr }.asInstanceOf[X] })
       .getOrElse(report.errorAndAbort("Tuple conversion error"))

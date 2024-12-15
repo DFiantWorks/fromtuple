@@ -5,6 +5,7 @@ Scala 3 Tuple to Collections and Classes Conversion Library
 ```scala
 import fromtuple.conversion
 import collection.immutable.{ListMap, ListSet}
+val l0:  List[Int]          = (1) //Scala sees it as a literal 1 and not a tuple, but this is supported
 val l1:  List[Int]          = (1, 2)
 val ll1: List[List[Int]]    = (l1, l1)
 val ll2: List[List[Int]]    = ((1, 2), (3, 4))
@@ -19,8 +20,8 @@ val ml1: Map[String, List[Int]]         = ("k1" -> (1, 2), "k2" -> (3, 4), "k3" 
 val ml2: ListMap[Double, ListSet[Long]] = (1 -> (1, 2), 2.0 -> (3L, 4), 3 -> (1, 2L))
 case class Foo[T](x: T, y: Int)
 class Bar(val x: Int, val y: Int, val z: String)
-val c1:  Foo[Int] = (1, 2)
-val c2:  Foo[String] = ("1", 2)
-val c3:  Bar = (1, 2, "3")
-val c4:  Foo[List[Int]] = ((1, 2, 3), 4)
+val c1:  Foo[Int]           = (1, 2)
+val c2:  Foo[String]        = ("1", 2)
+val c3:  Bar                = (1, 2, "3")
+val c4:  Foo[List[Int]]     = ((1, 2, 3), 4)
 ```

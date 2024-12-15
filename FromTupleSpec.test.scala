@@ -12,6 +12,8 @@ class Spec extends FunSuite:
     assertEquals(errors.map(e => (e.column, e.message)).toSeq, expectedErrors)
 
   test("Tuple to List"):
+    val l0: ~[List[Int]] = (1)
+    assertEquals(l0, List(1))
     val l1: ~[List[Int]] = (1, 2)
     assertEquals(l1, List(1, 2))
     val ll1: ~[List[List[Int]]] = (l1, l1)

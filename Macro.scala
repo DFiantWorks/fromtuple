@@ -87,6 +87,98 @@ private object macros:
         case fail: ImplicitSearchFailure =>
           report.error(fail.explanation, fromPos)
           None
+    def tupleConversion(tupleArgs: List[Term]): Option[Term] =
+      def varArgsExpr[A: Type, C[_]: Type](
+          constr: List[Expr[A]] => Expr[C[A]]
+      ): Option[Term] =
+        val listArgs =
+          tupleArgs.map(a => convertRecur(a, TypeRepr.of[A]).map(_.asExprOf[A]))
+        if (listArgs.exists(_.isEmpty)) None
+        else Some(constr(listArgs.flatten).asTerm)
+      def varArgsPairExpr[K: Type, V: Type, C[_, _]: Type](
+          constr: List[Expr[(K, V)]] => Expr[C[K, V]]
+      ): Option[Term] =
+        val mapArgs = tupleArgs.map(a =>
+          a.asExpr match
+            case '{ { ${ key }: Any } -> $value } =>
+              // converting and reconstructing key and value pairs
+              (
+                convertRecur(key.asTerm, TypeRepr.of[K]),
+                convertRecur(value.asTerm, TypeRepr.of[V])
+              ) match
+                case (Some(key), Some(value)) =>
+                  Some('{ ${ key.asExprOf[K] } -> ${ value.asExprOf[V] } })
+                case _ =>
+                  None
+            case _ =>
+              report.error("Invalid `key -> value` pattern for Map", a.pos)
+              None
+        )
+        if (mapArgs.exists(_.isEmpty)) None
+        else Some(constr(mapArgs.flatten).asTerm)
+      toTpe.asType match
+        // Tuple to Map/ListMap conversion
+        case '[ListMap[k, v]] =>
+          varArgsPairExpr[k, v, ListMap](x => '{ ListMap[k, v](${ Varargs(x) }*) })
+        case '[Map[k, v]] =>
+          varArgsPairExpr[k, v, Map](x => '{ Map[k, v](${ Varargs(x) }*) })
+        // Tuple to List/ListSet/Seq/Set conversion
+        case '[ListSet[t]] =>
+          varArgsExpr[t, ListSet](x => '{ ListSet[t](${ Varargs(x) }*) })
+        case '[List[t]] => varArgsExpr[t, List](x => '{ List[t](${ Varargs(x) }*) })
+        case '[Seq[t]]  => varArgsExpr[t, Seq](x => '{ Seq[t](${ Varargs(x) }*) })
+        case '[Set[t]]  => varArgsExpr[t, Set](x => '{ Set[t](${ Varargs(x) }*) })
+        // Tuple to new class instance conversion
+        case _ =>
+          val toSym = toTpe.typeSymbol
+          val constr = toSym.primaryConstructor
+          // only classes with a single parameter block are supported
+          val (paramSyms, typeParamSyms) = constr.paramSymss match
+            // has type parameters
+            case typeParamSyms :: paramSyms :: Nil if toTpe.typeArgs.nonEmpty =>
+              (paramSyms, typeParamSyms)
+            // has no type parameters
+            case paramSyms :: Nil if toTpe.typeArgs.isEmpty =>
+              (paramSyms, Nil)
+            case _ => (Nil, Nil)
+          if (toSym.isClassDef && paramSyms.nonEmpty)
+            if (paramSyms.length != tupleArgs.length)
+              report.error(
+                s"Expected number of arguments for `$toSym` is ${paramSyms.length}, but found ${tupleArgs.length}",
+                fromPos
+              )
+              None
+            else
+              val applyArgs = paramSyms
+                .lazyZip(tupleArgs)
+                .map((f, a) =>
+                  convertRecur(
+                    a,
+                    f.termRef.widen.substituteTypes(typeParamSyms, toTpe.typeArgs)
+                  )
+                )
+              if (applyArgs.exists(_.isEmpty)) None
+              // new class instance without type argument
+              else if (toTpe.typeArgs.isEmpty)
+                Some(
+                  Apply(
+                    Select(New(TypeIdent(toSym)), constr),
+                    applyArgs.flatten
+                  )
+                )
+              // new class instance with type arguments
+              else
+                Some(
+                  Apply(
+                    TypeApply(
+                      Select(New(TypeIdent(toSym)), constr),
+                      toTpe.typeArgs.map(_.asTypeTree)
+                    ),
+                    applyArgs.flatten
+                  )
+                )
+          else conversionSummon
+        case _ => conversionSummon
     // currently a naive implementation that does not ignore whitespaces
     // lazy val lhs = Position(fromPos.sourceFile, fromPos.start - 1, fromPos.start).sourceCode
     // lazy val rhs = Position(fromPos.sourceFile, fromPos.end, fromPos.end + 1).sourceCode
@@ -117,99 +209,8 @@ private object macros:
         // Dedicated Tuple conversion
         case '[Tuple] =>
           from.getTupleArgs match
-            case Some(tupleArgs) =>
-              def varArgsExpr[A: Type, C[_]: Type](
-                  constr: List[Expr[A]] => Expr[C[A]]
-              ): Option[Term] =
-                val listArgs =
-                  tupleArgs.map(a => convertRecur(a, TypeRepr.of[A]).map(_.asExprOf[A]))
-                if (listArgs.exists(_.isEmpty)) None
-                else Some(constr(listArgs.flatten).asTerm)
-              def varArgsPairExpr[K: Type, V: Type, C[_, _]: Type](
-                  constr: List[Expr[(K, V)]] => Expr[C[K, V]]
-              ): Option[Term] =
-                val mapArgs = tupleArgs.map(a =>
-                  a.asExpr match
-                    case '{ { ${ key }: Any } -> $value } =>
-                      // converting and reconstructing key and value pairs
-                      (
-                        convertRecur(key.asTerm, TypeRepr.of[K]),
-                        convertRecur(value.asTerm, TypeRepr.of[V])
-                      ) match
-                        case (Some(key), Some(value)) =>
-                          Some('{ ${ key.asExprOf[K] } -> ${ value.asExprOf[V] } })
-                        case _ =>
-                          None
-                    case _ =>
-                      report.error("Invalid `key -> value` pattern for Map", a.pos)
-                      None
-                )
-                if (mapArgs.exists(_.isEmpty)) None
-                else Some(constr(mapArgs.flatten).asTerm)
-              toTpe.asType match
-                // Tuple to Map/ListMap conversion
-                case '[ListMap[k, v]] =>
-                  varArgsPairExpr[k, v, ListMap](x => '{ ListMap[k, v](${ Varargs(x) }*) })
-                case '[Map[k, v]] =>
-                  varArgsPairExpr[k, v, Map](x => '{ Map[k, v](${ Varargs(x) }*) })
-                // Tuple to List/ListSet/Seq/Set conversion
-                case '[ListSet[t]] =>
-                  varArgsExpr[t, ListSet](x => '{ ListSet[t](${ Varargs(x) }*) })
-                case '[List[t]] => varArgsExpr[t, List](x => '{ List[t](${ Varargs(x) }*) })
-                case '[Seq[t]]  => varArgsExpr[t, Seq](x => '{ Seq[t](${ Varargs(x) }*) })
-                case '[Set[t]]  => varArgsExpr[t, Set](x => '{ Set[t](${ Varargs(x) }*) })
-                // Tuple to new class instance conversion
-                case _ =>
-                  val toSym = toTpe.typeSymbol
-                  val constr = toSym.primaryConstructor
-                  // only classes with a single parameter block are supported
-                  val (paramSyms, typeParamSyms) = constr.paramSymss match
-                    // has type parameters
-                    case typeParamSyms :: paramSyms :: Nil if toTpe.typeArgs.nonEmpty =>
-                      (paramSyms, typeParamSyms)
-                    // has no type parameters
-                    case paramSyms :: Nil if toTpe.typeArgs.isEmpty =>
-                      (paramSyms, Nil)
-                    case _ => (Nil, Nil)
-                  if (toSym.isClassDef && paramSyms.nonEmpty)
-                    if (paramSyms.length != tupleArgs.length)
-                      report.error(
-                        s"Expected number of arguments for `$toSym` is ${paramSyms.length}, but found ${tupleArgs.length}",
-                        fromPos
-                      )
-                      None
-                    else
-                      val applyArgs = paramSyms
-                        .lazyZip(tupleArgs)
-                        .map((f, a) =>
-                          convertRecur(
-                            a,
-                            f.termRef.widen.substituteTypes(typeParamSyms, toTpe.typeArgs)
-                          )
-                        )
-                      if (applyArgs.exists(_.isEmpty)) None
-                      // new class instance without type argument
-                      else if (toTpe.typeArgs.isEmpty)
-                        Some(
-                          Apply(
-                            Select(New(TypeIdent(toSym)), constr),
-                            applyArgs.flatten
-                          )
-                        )
-                      // new class instance with type arguments
-                      else
-                        Some(
-                          Apply(
-                            TypeApply(
-                              Select(New(TypeIdent(toSym)), constr),
-                              toTpe.typeArgs.map(_.asTypeTree)
-                            ),
-                            applyArgs.flatten
-                          )
-                        )
-                  else conversionSummon
-                case _ => conversionSummon
-            case None => conversionSummon
+            case Some(tupleArgs) => tupleConversion(tupleArgs)
+            case None            => conversionSummon
         // Basic conversion using scala.Conversion
         case _ => conversionSummon
 

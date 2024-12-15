@@ -1,4 +1,4 @@
-import fromtuple.*
+import fromtuple.~
 import munit.*
 import compiletime.testing.{typeCheckErrors, Error}
 import collection.immutable.{ListMap, ListSet}

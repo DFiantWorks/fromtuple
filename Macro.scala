@@ -2,6 +2,8 @@ package fromtuple
 import scala.quoted.*
 import scala.collection.immutable.{ListMap, ListSet}
 private object macros:
+  // helper alias to prevent widening in implicit conversion return type
+  type Id[T] = T
   extension [Q <: Quotes](using q: Q)(tpe: q.reflect.TypeRepr)
     def asTypeAny: Type[Any] =
       import quotes.reflect.*
@@ -44,10 +46,21 @@ private object macros:
           None
   def convertRecur[Q <: Quotes](using
       q: Q
-  )(from: q.reflect.Term, toTpe: q.reflect.TypeRepr): Option[q.reflect.Term] =
+  )(
+      from: q.reflect.Term,
+      toTpe: q.reflect.TypeRepr
+  ): Option[q.reflect.Term] =
+    convertRecurPos(from, toTpe, from.pos)
+  def convertRecurPos[Q <: Quotes](using
+      q: Q
+  )(
+      from: q.reflect.Term,
+      toTpe: q.reflect.TypeRepr,
+      fromPos: q.reflect.Position
+  ): Option[q.reflect.Term] =
     import quotes.reflect.*
+    val fromType = from.tpe.asTypeAny
     def conversionSummon: Option[Term] =
-      val fromType = from.tpe.asTypeAny
       val toType = toTpe.asTypeAny
       val convertionTpe =
         AppliedType(Symbol.requiredClass("scala.Conversion").typeRef, List(from.tpe, toTpe))
@@ -58,11 +71,11 @@ private object macros:
         case _: NoMatchingImplicits =>
           report.error(
             s"Found: (${from.show} : ${from.tpe.widen.show})\nRequired: ${toTpe.show}",
-            from.pos
+            fromPos
           )
           None
         case fail: ImplicitSearchFailure =>
-          report.error(fail.explanation, from.pos)
+          report.error(fail.explanation, fromPos)
           None
     // if the from term type matches the target type, then return it as is
     if (from.tpe <:< toTpe) Some(from)
@@ -139,7 +152,7 @@ private object macros:
                     if (paramSyms.length != tupleArgs.length)
                       report.error(
                         s"Expected number of arguments for `$toSym` is ${paramSyms.length}, but found ${tupleArgs.length}",
-                        from.pos
+                        fromPos
                       )
                       None
                     else
@@ -177,10 +190,18 @@ private object macros:
         // Basic conversion using scala.Conversion
         case _ => conversionSummon
 
-  def fromTupleMacro[F <: Tuple: Type, T: Type](using Quotes)(
+  def fromTupleMacro[F: Type, T: Type](using Quotes)(
       from: Expr[F]
   ): Expr[FromTuple[T]] =
     import quotes.reflect.*
     convertRecur(from.asTerm, TypeRepr.of[T])
       .map(toTerm => '{ ${ toTerm.asExpr }.asInstanceOf[FromTuple[T]] })
+      .getOrElse(report.errorAndAbort("Tuple conversion error"))
+
+  def tupleToXMacro[F: Type, X: Type](using Quotes)(
+      from: Expr[F]
+  ): Expr[X] =
+    import quotes.reflect.*
+    convertRecur(from.asTerm, TypeRepr.of[X].dealias)
+      .map(toTerm => '{ ${ toTerm.asExpr }.asInstanceOf[X] })
       .getOrElse(report.errorAndAbort("Tuple conversion error"))

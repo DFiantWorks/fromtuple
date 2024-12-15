@@ -4,6 +4,16 @@ import scala.collection.immutable.{ListMap, ListSet}
 private object macros:
   // helper alias to prevent widening in implicit conversion return type
   type Id[T] = T
+  // implicit limiter to when a conversion should trigger
+  trait AllowedConversion[F, T]
+  trait AllowedConversionLP:
+    object OK extends AllowedConversion[Any, Any]
+    inline given fromElement[F, T <: Iterable[F]]: AllowedConversion[F, T] =
+      OK.asInstanceOf[AllowedConversion[F, T]]
+  object AllowedConversion extends AllowedConversionLP:
+    inline given fromTuple[F <: Tuple, T]: AllowedConversion[F, T] =
+      OK.asInstanceOf[AllowedConversion[F, T]]
+
   extension [Q <: Quotes](using q: Q)(tpe: q.reflect.TypeRepr)
     def asTypeAny: Type[Any] =
       import quotes.reflect.*
@@ -77,6 +87,19 @@ private object macros:
         case fail: ImplicitSearchFailure =>
           report.error(fail.explanation, fromPos)
           None
+    // currently a naive implementation that does not ignore whitespaces
+    // lazy val lhs = Position(fromPos.sourceFile, fromPos.start - 1, fromPos.start).sourceCode
+    // lazy val rhs = Position(fromPos.sourceFile, fromPos.end, fromPos.end + 1).sourceCode
+    // val singleElementTuple = false
+    // (lhs, rhs) match
+    //   case (Some("("), Some(")")) => true
+    //   case _                      => false
+    // if (singleElementTuple)
+    //   val updatedFrom = '{
+    //     Tuple1[fromType.Underlying](${ from.asExprOf[fromType.Underlying] })
+    //   }.asTerm
+    //   val updatedPos = Position(fromPos.sourceFile, fromPos.start - 1, fromPos.end + 1)
+    //   convertRecurPos(updatedFrom, toTpe, updatedPos)
     // if the from term type matches the target type, then return it as is
     if (from.tpe <:< toTpe) Some(from)
     else

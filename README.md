@@ -3,7 +3,7 @@ Scala 3 Tuple to Collections and Classes Conversion Library
 
 ## Examples
 ```scala
-import fromtuple.conversion
+import fromtuple.convertAll
 import collection.immutable.{ListMap, ListSet}
 val l0:  List[Int]          = (1) //Scala sees it as a literal 1 and not a tuple, but this is supported
 val l1:  List[Int]          = (1, 2)

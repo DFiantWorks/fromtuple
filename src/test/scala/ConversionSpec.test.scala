@@ -1,4 +1,4 @@
-import fromtuple.conversion
+import fromtuple.convertAll
 import munit.*
 import compiletime.testing.{typeCheckErrors, Error}
 import collection.immutable.{ListMap, ListSet}

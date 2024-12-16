@@ -3,7 +3,7 @@ import munit.*
 import compiletime.testing.{typeCheckErrors, Error}
 import collection.immutable.{ListMap, ListSet}
 
-class Spec extends FunSuite:
+class FromTupleSpec extends FunSuite:
   transparent inline def assertCompiletimeError(
       inline code: String,
       expectedErrors: (Int, String)*

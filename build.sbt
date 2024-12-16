@@ -1,4 +1,3 @@
-val libVersion = "0.1.0"
 val scala3Version = "3.3.4"
 
 //Dependency versions
@@ -25,7 +24,6 @@ lazy val root = project
   .in(file("."))
   .settings(
     name := "fromtuple",
-    version := libVersion,
     scalacOptions ++= Seq(
       "-deprecation",
       "-encoding",

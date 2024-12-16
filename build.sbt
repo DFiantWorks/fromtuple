@@ -17,7 +17,9 @@ inThisBuild(
         url("https://x.com/soronpo")
       )
     ),
-    versionScheme := Some("semver-spec")
+    versionScheme := Some("semver-spec"),
+    sonatypeCredentialHost := "s01.oss.sonatype.org",
+    sonatypeRepository := "https://s01.oss.sonatype.org/service/local"
   )
 )
 

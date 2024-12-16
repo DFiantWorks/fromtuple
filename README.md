@@ -1,6 +1,20 @@
 # fromtuple
 Scala 3 Tuple to Collections and Classes Conversion Library
 
+## Usage
+
+### sbt
+```
+libraryDependencies += "io.github.dfiantworks" %% "fromtuple" % "0.1.1"
+scalacOptions += "-language:implicitConversions"
+```
+
+### scala-cli
+```
+//> using dep io.github.dfiantworks::fromtuple::0.1.1
+//> using option -language:implicitConversions
+```
+
 ## Examples
 ```scala
 import fromtuple.convertAll

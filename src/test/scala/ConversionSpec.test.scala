@@ -113,5 +113,5 @@ class ConversionSpec extends FunSuite:
       val x: Foo[Int] = (1, 2, 3)
       """,
       26 -> """Tuple conversion error""",
-      26 -> """Expected number of arguments for `class Foo` is 2, but found 3"""
+      25 -> """Expected number of arguments for `class Foo` is 2, but found 3"""
     )

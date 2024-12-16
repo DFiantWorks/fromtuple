@@ -3,7 +3,6 @@ val scala3Version = "3.3.4"
 //Dependency versions
 val munitVersion = "1.0.3"
 
-import xerial.sbt.Sonatype.sonatypeCentralHost
 //Publishing
 inThisBuild(
   List(
@@ -19,7 +18,8 @@ inThisBuild(
       )
     ),
     versionScheme := Some("semver-spec"),
-    sonatypeCredentialHost := sonatypeCentralHost
+    sonatypeCredentialHost := "s01.oss.sonatype.org",
+    sonatypeRepository := "https://s01.oss.sonatype.org/service/local"
   )
 )
 

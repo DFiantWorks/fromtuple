@@ -16,7 +16,8 @@ inThisBuild(
         "",
         url("https://x.com/soronpo")
       )
-    )
+    ),
+    versionScheme := Some("semver-spec")
   )
 )
 
